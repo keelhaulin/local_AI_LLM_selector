@@ -1,1 +1,2 @@
 flask
+echo -e "\nhuggingface_hub>=0.16.4\nollama-python>=0.1.0" >> requirements.txt
