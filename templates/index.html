@@ -1,0 +1,59 @@
+cat > templates/index.html << 'EOF'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>LLM Selector</title>
+</head>
+<body>
+  <h1>🧠 LLM Model Selector</h1>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <ul>
+        {% for cat, msg in messages %}
+          <li class="{{ cat }}">{{ msg }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+
+  <form method="post" action="{{ url_for('suggest') }}">
+    Use Case: <input name="use_case"/><br/>
+    VRAM (GB): <input name="vram" type="number"/><br/>
+    Context Window: <input name="context" type="number"/><br/>
+    TPM target: <input name="tpm" type="number"/><br/>
+    <label><input type="checkbox" name="flash_attn"/> Flash Attention</label><br/>
+    <label><input type="checkbox" name="kv_cache"/> KV Cache</label><br/>
+    <button type="submit">Suggest Models</button>
+  </form>
+
+  {% if suggestions %}
+    <h3>🔍 Suggestions:</h3>
+    <ul>
+      {% for s in suggestions %}
+        <li>{{ s }}</li>
+      {% endfor %}
+    </ul>
+    <p><strong>{{ note }}</strong></p>
+  {% endif %}
+
+  <h3>🔄 Hugging Face Models</h3>
+  <form method="post" action="{{ url_for('suggest') }}">
+    <select name="hf_model">
+      {% for m in hf_models %}
+        <option value="{{ m }}">{{ m }}</option>
+      {% endfor %}
+    </select>
+    <button name="action" value="pull_run">Pull & Run via Ollama</button>
+  </form>
+
+  <h3>💾 Local Models</h3>
+  <ul>
+    {% for m in local_models %}
+      <li>{{ m }}</li>
+    {% endfor %}
+  </ul>
+  <p>Place your <code>.gguf</code> files in the <code>models/</code> folder.</p>
+</body>
+</html>
+EOF
