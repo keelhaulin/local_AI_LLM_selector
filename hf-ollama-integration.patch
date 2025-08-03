@@ -1,0 +1,153 @@
+diff --git a/requirements.txt b/requirements.txt
+index e69de29..abcd123 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,1 +1,3 @@
+-flask
++flask
++huggingface_hub>=0.16.4
++ollama-python>=0.1.0
+
+diff --git a/app.py b/app.py
+index 1234567..89abcde 100644
+--- a/app.py
++++ b/app.py
+@@ -1,6 +1,15 @@
+-from flask import Flask, request, render_template_string
++from flask import Flask, request, render_template, redirect, url_for, flash
++from huggingface_hub import HfApi
++import subprocess, os, glob
+
+ app = Flask(__name__)
++app.secret_key = os.environ.get("FLASK_SECRET", "change-me")
+
+-TEMPLATE = '''
+-<!doctype html>
+-<title>LLM Model Selector</title>
++@app.route("/", methods=["GET", "POST"])
++def index():
++    # auto-scan local models
++    local_models = [os.path.basename(p) for p in glob.glob("models/*.gguf")]
++
++    hf_models = []
++    try:
++        hf_models = [m.modelId for m in HfApi().list_models(limit=10)]
++    except Exception as e:
++        flash(f"Could not query Hugging Face: {e}", "warning")
+
++    return render_template("index.html",
++                           local_models=local_models,
++                           hf_models=hf_models,
++                           suggestions=None,
++                           note=None)
+
+ @app.route("/suggest", methods=["POST"])
+ def suggest():
+     use_case = request.form.get("use_case", "")
+@@ -60,6 +69,22 @@ def suggest_model(...):
+     return suggestions[:10], perf_note
+
++    # handle Pull & Run
++    if request.form.get("action") == "pull_run":
++        model = request.form.get("hf_model")
++        try:
++            subprocess.run(["ollama", "pull", model], check=True)
++            subprocess.Popen(["ollama", "run", model])
++            flash(f"Pulled & running {model}", "success")
++        except subprocess.CalledProcessError as e:
++            flash(f"Error with ollama: {e}", "danger")
++        return redirect(url_for("index"))
+
+ @app.route("/suggest", methods=["POST"])
+ def suggest_route():
+     # existing suggestion logic...
+@@ -85,6 +110,7 @@ def suggest_route():
+     return render_template("index.html",
+                            suggestions=suggestions,
+                            note=note,
++                           hf_models=[m.modelId for m in HfApi().list_models(limit=10)],
+                            local_models=[os.path.basename(p) for p in glob.glob("models/*.gguf")])
+
+ if __name__ == "__main__":
+diff --git a/templates/index.html b/templates/index.html
+new file mode 100644
+index 0000000..f00ba12
+--- /dev/null
++++ b/templates/index.html
+@@ -0,0 +1,70 @@
++<!doctype html>
++<html lang="en">
++<head><meta charset="utf-8"><title>LLM Selector</title></head>
++<body>
++  <h1>🧠 LLM Model Selector</h1>
++  {% with messages = get_flashed_messages(with_categories=true) %}
++    {% if messages %}
++      <ul>
++        {% for cat, msg in messages %}
++          <li class="{{ cat }}">{{ msg }}</li>
++        {% endfor %}
++      </ul>
++    {% endif %}
++  {% endwith %}
++
++  <form method="post" action="{{ url_for('suggest') }}">
++    Use Case: <input name="use_case"/><br/>
++    VRAM (GB): <input name="vram" type="number"/><br/>
++    Context Window: <input name="context" type="number"/><br/>
++    TPM target: <input name="tpm" type="number"/><br/>
++    <label><input type="checkbox" name="flash_attn"/> Flash Attention</label><br/>
++    <label><input type="checkbox" name="kv_cache"/> KV Cache</label><br/>
++    <button type="submit">Suggest Models</button>
++  </form>
++
++  {% if suggestions %}
++  <h3>🔍 Suggestions:</h3>
++  <ul>{% for s in suggestions %}
++    <li>{{ s }}</li>
++  {% endfor %}</ul>
++  <p><strong>{{ note }}</strong></p>
++  {% endif %}
++
++  <h3>🔄 Hugging Face Models</h3>
++  <form method="post" action="{{ url_for('suggest') }}">
++    <select name="hf_model">
++      {% for m in hf_models %}
++        <option value="{{ m }}">{{ m }}</option>
++      {% endfor %}
++    </select>
++    <button name="action" value="pull_run">Pull & Run via Ollama</button>
++  </form>
++
++  <h3>💾 Local Models</h3>
++  <ul>{% for m in local_models %}
++    <li>{{ m }}</li>
++  {% endfor %}</ul>
++  <p>Place your `.gguf` files in the `models/` folder.</p>
++
++</body>
++</html>
+diff --git a/README.md b/README.md
+index abcdef0..1234567 100644
+--- a/README.md
++++ b/README.md
+@@ -6,6 +6,12 @@ A simple, intuitive web-based tool to help you choose the best Large Langua
+ - Suggests top 10 model variants
+ - Optional toggles for Flash Attention & KV Cache
+ - Dockerized for easy deployment
++- **Hugging Face Hub integration**: browse & pull top 10 models
++- **Ollama helper**: “Pull & Run” directly from the UI
++- **Local model detection**: auto-list any `.gguf` in `models/`
++
++## 📂 New Folder Layout
++
++```
++llm_model_selector_web/
++├── app.py
++├── Dockerfile
++├── requirements.txt
++├── templates/
++│   └── index.html
++├── models/           # put .gguf files here
++└── README.md
++```
+
